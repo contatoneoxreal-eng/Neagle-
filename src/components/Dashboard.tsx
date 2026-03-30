@@ -5,9 +5,11 @@ import StatsCards from "./StatsCards";
 import ExpenseChart from "./ExpenseChart";
 import CategoryBreakdown from "./CategoryBreakdown";
 import ExpenseTable from "./ExpenseTable";
+import UploadReceipt from "./UploadReceipt";
 import { DashboardStats, ExpenseWithItems } from "@/types";
 
 type Period = "week" | "month" | "year";
+type Tab = "dashboard" | "upload";
 
 const periodLabels: Record<Period, string> = {
   week: "Semana",
@@ -26,6 +28,7 @@ const emptyStats: DashboardStats = {
 };
 
 export default function Dashboard() {
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [period, setPeriod] = useState<Period>("month");
   const [stats, setStats] = useState<DashboardStats>(emptyStats);
   const [expenses, setExpenses] = useState<ExpenseWithItems[]>([]);
@@ -69,6 +72,51 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Tab switcher */}
+            <div className="flex items-center bg-dark-700 rounded-lg p-1 mr-2">
+              <button
+                onClick={() => setTab("dashboard")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  tab === "dashboard"
+                    ? "bg-dark-500 text-neon-cyan shadow-sm"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
+                Dashboard
+              </button>
+              <button
+                onClick={() => setTab("upload")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  tab === "upload"
+                    ? "bg-dark-500 text-neon-magenta shadow-sm"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Receipts counter */}
+        <div className="mt-4 flex items-center gap-2 text-xs text-gray-500">
+          <div className="w-2 h-2 rounded-full bg-neon-cyan animate-pulse-neon" />
+          {stats.totalReceipts} nota(s) processada(s) &middot; Atualiza a cada
+          30s
+        </div>
+      </header>
+
+      {tab === "dashboard" ? (
+        <>
+          {/* Period filter + refresh */}
+          <div className="flex items-center gap-2 mb-6">
             {(Object.keys(periodLabels) as Period[]).map((p) => (
               <button
                 key={p}
@@ -82,7 +130,6 @@ export default function Dashboard() {
                 {periodLabels[p]}
               </button>
             ))}
-
             <button
               onClick={fetchData}
               className="ml-2 p-2 rounded-lg text-gray-400 hover:text-neon-cyan hover:bg-dark-600 transition-all"
@@ -107,40 +154,37 @@ export default function Dashboard() {
               </svg>
             </button>
           </div>
-        </div>
 
-        {/* Receipts counter */}
-        <div className="mt-4 flex items-center gap-2 text-xs text-gray-500">
-          <div className="w-2 h-2 rounded-full bg-neon-cyan animate-pulse-neon" />
-          {stats.totalReceipts} nota(s) processada(s) &middot; Atualiza a cada
-          30s
-        </div>
-      </header>
+          {/* Stats Cards */}
+          <section className="mb-6">
+            <StatsCards stats={stats} />
+          </section>
 
-      {/* Stats Cards */}
-      <section className="mb-6">
-        <StatsCards stats={stats} />
-      </section>
+          {/* Charts */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="lg:col-span-2">
+              <ExpenseChart data={stats.dailyExpenses} />
+            </div>
+            <div>
+              <CategoryBreakdown data={stats.categoryBreakdown} />
+            </div>
+          </section>
 
-      {/* Charts */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2">
-          <ExpenseChart data={stats.dailyExpenses} />
-        </div>
-        <div>
-          <CategoryBreakdown data={stats.categoryBreakdown} />
-        </div>
-      </section>
-
-      {/* Table */}
-      <section>
-        <ExpenseTable expenses={expenses} />
-      </section>
+          {/* Table */}
+          <section>
+            <ExpenseTable expenses={expenses} />
+          </section>
+        </>
+      ) : (
+        /* Upload tab */
+        <section className="max-w-xl mx-auto">
+          <UploadReceipt onSuccess={fetchData} />
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="mt-8 text-center text-xs text-gray-600 pb-4">
-        Envie uma foto da nota fiscal pelo WhatsApp para adicionar gastos
-        automaticamente
+        Envie uma foto da nota fiscal pelo WhatsApp ou pela aba Adicionar
       </footer>
     </div>
   );
