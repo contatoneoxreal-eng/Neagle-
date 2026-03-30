@@ -35,11 +35,14 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const res = await fetch(`/api/expenses?period=${period}`);
+      if (!res.ok) throw new Error("API error");
       const data = await res.json();
-      setStats(data.stats);
-      setExpenses(data.expenses);
+      setStats(data.stats ?? emptyStats);
+      setExpenses(data.expenses ?? []);
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
+      setStats(emptyStats);
+      setExpenses([]);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   AreaChart,
   Area,
@@ -34,7 +35,7 @@ function CustomTooltip({
   );
 }
 
-export default function ExpenseChart({ data }: ExpenseChartProps) {
+function ExpenseChartInner({ data }: ExpenseChartProps) {
   const formatted = data.map((d) => ({
     ...d,
     date: new Date(d.date).toLocaleDateString("pt-BR", {
@@ -83,3 +84,13 @@ export default function ExpenseChart({ data }: ExpenseChartProps) {
     </div>
   );
 }
+
+export default dynamic(() => Promise.resolve(ExpenseChartInner), {
+  ssr: false,
+  loading: () => (
+    <div className="glass-card glow-cyan p-6 animate-fade-in">
+      <h2 className="text-lg font-semibold mb-4 text-gray-200">Gastos Diários</h2>
+      <div className="h-64 flex items-center justify-center text-gray-500">Carregando gráfico...</div>
+    </div>
+  ),
+});
