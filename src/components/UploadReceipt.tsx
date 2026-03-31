@@ -11,81 +11,106 @@ interface UploadResult {
   items: { name: string; quantity: number; totalPrice: number }[];
 }
 
+async function safeUpload(file: File): Promise<{ success: boolean; expense?: UploadResult; error?: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch("/api/upload", { method: "POST", body: formData });
+  } catch {
+    return { success: false, error: "Erro de conexão. Tente novamente." };
+  }
+
+  let text: string;
+  try {
+    text = await res.text();
+  } catch {
+    return { success: false, error: "Erro ao ler resposta do servidor." };
+  }
+
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { success: false, error: "Erro no servidor. Verifique se o banco de dados e a API key estão configurados na Vercel." };
+  }
+
+  if (!res.ok) {
+    return { success: false, error: (data.error as string) || "Erro ao processar nota fiscal." };
+  }
+
+  const expense = data.expense as Record<string, unknown> | undefined;
+  if (!expense) {
+    return { success: false, error: "Resposta inválida do servidor." };
+  }
+
+  return {
+    success: true,
+    expense: {
+      storeName: String(expense.storeName || "Loja não identificada"),
+      total: Number(expense.total) || 0,
+      category: String(expense.category || "OUTROS"),
+      items: Array.isArray(expense.items) ? expense.items : [],
+    },
+  };
+}
+
 export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
-    // Accept any file that looks like an image
     const isImage = file.type.startsWith("image/") ||
-      /\.(jpg|jpeg|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name);
+      /\.(jpg|jpeg|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name || "");
 
     if (!isImage) {
       setError("Envie apenas imagens (JPG, PNG, WebP, HEIC)");
       return;
     }
 
+    // Set preview safely
     try {
-      setPreview(URL.createObjectURL(file));
+      const url = URL.createObjectURL(file);
+      setPreview(url);
     } catch {
       setPreview(null);
     }
+
     setResult(null);
     setError(null);
     setUploading(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
+    const response = await safeUpload(file);
 
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      // Use text() first to avoid Safari JSON parse errors
-      const text = await res.text();
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error("Erro no servidor. Verifique se o banco de dados e a API key estão configurados.");
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || "Erro ao processar");
-      }
-
-      if (!data.expense) {
-        throw new Error("Resposta inválida do servidor");
-      }
-
-      setResult({
-        storeName: data.expense.storeName || "Loja não identificada",
-        total: data.expense.total || 0,
-        category: data.expense.category || "OUTROS",
-        items: Array.isArray(data.expense.items) ? data.expense.items : [],
-      });
+    if (response.success && response.expense) {
+      setResult(response.expense);
       onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao processar nota fiscal");
-    } finally {
-      setUploading(false);
+    } else {
+      setError(response.error || "Erro desconhecido");
     }
+
+    setUploading(false);
   }
 
   function reset() {
+    if (preview) {
+      try { URL.revokeObjectURL(preview); } catch { /* ignore */ }
+    }
     setPreview(null);
     setResult(null);
     setError(null);
-    if (cameraRef.current) cameraRef.current.value = "";
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function openFilePicker() {
+    if (fileRef.current) {
+      fileRef.current.click();
+    }
   }
 
   return (
@@ -94,22 +119,11 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
         Adicionar Nota Fiscal
       </h2>
 
-      {/* Hidden file inputs */}
-      <input
-        ref={cameraRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-        }}
-      />
+      {/* Single file input — no capture attribute for Safari compatibility */}
       <input
         ref={fileRef}
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -117,14 +131,14 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
         }}
       />
 
-      {!preview ? (
+      {!preview && !uploading ? (
         <div className="space-y-4">
-          {/* Drag and drop area */}
+          {/* Drag and drop area — desktop */}
           <div
-            className={"relative border-2 border-dashed rounded-xl p-6 text-center transition-all " + (
+            className={"relative border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer " + (
               dragging
                 ? "border-neon-cyan bg-neon-cyan/5"
-                : "border-dark-500"
+                : "border-dark-500 hover:border-neon-cyan/40"
             )}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
@@ -134,66 +148,29 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
               const file = e.dataTransfer.files[0];
               if (file) handleFile(file);
             }}
+            onClick={openFilePicker}
           >
-            <div className="flex flex-col items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p className="text-gray-400 text-sm">
-                Arraste uma imagem aqui
-              </p>
-              <div className="flex gap-2 mt-1">
-                <span className="px-2 py-0.5 rounded bg-dark-600 text-gray-500 text-xs">JPG</span>
-                <span className="px-2 py-0.5 rounded bg-dark-600 text-gray-500 text-xs">PNG</span>
-                <span className="px-2 py-0.5 rounded bg-dark-600 text-gray-500 text-xs">WebP</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => cameraRef.current?.click()}
-              className="flex flex-col items-center gap-2 p-5 rounded-xl border border-dark-500 hover:border-neon-magenta/50 hover:bg-neon-magenta/5 transition-all group"
-            >
-              <div className="w-12 h-12 rounded-full bg-dark-600 group-hover:bg-neon-magenta/10 flex items-center justify-center transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-neon-magenta transition-all">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-16 h-16 rounded-full bg-dark-600 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-neon-cyan">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                   <circle cx="12" cy="13" r="4"/>
                 </svg>
               </div>
-              <span className="text-gray-300 group-hover:text-neon-magenta text-sm font-medium transition-all">
-                Tirar Foto
-              </span>
-              <span className="text-gray-500 text-xs">
-                Abrir câmera
-              </span>
-            </button>
-
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex flex-col items-center gap-2 p-5 rounded-xl border border-dark-500 hover:border-neon-cyan/50 hover:bg-neon-cyan/5 transition-all group"
-            >
-              <div className="w-12 h-12 rounded-full bg-dark-600 group-hover:bg-neon-cyan/10 flex items-center justify-center transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 group-hover:text-neon-cyan transition-all">
-                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-                  <polyline points="13 2 13 9 20 9"/>
-                </svg>
+              <div>
+                <p className="text-gray-300 font-medium">
+                  Toque para tirar foto ou escolher arquivo
+                </p>
+                <p className="text-gray-500 text-sm mt-1">
+                  Aceita JPG, PNG, WebP e HEIC
+                </p>
               </div>
-              <span className="text-gray-300 group-hover:text-neon-cyan text-sm font-medium transition-all">
-                Enviar Arquivo
-              </span>
-              <span className="text-gray-500 text-xs">
-                Galeria ou arquivos
-              </span>
-            </button>
+            </div>
           </div>
 
           {/* Error in initial state */}
           {error && (
-            <div className="glass-card p-4 border border-red-500/30 bg-red-500/5">
+            <div className="rounded-xl p-4 border border-red-500/30 bg-red-500/5">
               <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}
@@ -202,15 +179,20 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
         <div className="space-y-4">
           {/* Image preview */}
           <div className="relative rounded-xl overflow-hidden bg-dark-700 flex items-center justify-center min-h-[200px]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={preview}
-              alt="Preview da nota fiscal"
-              className="max-h-64 object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
+            {preview && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={preview}
+                alt="Preview da nota fiscal"
+                className="max-h-64 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            )}
+            {!preview && (
+              <p className="text-gray-500 text-sm">Processando imagem...</p>
+            )}
             {uploading && (
               <div className="absolute inset-0 bg-dark-900/80 flex flex-col items-center justify-center gap-3">
                 <div className="w-10 h-10 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin" />
@@ -270,7 +252,7 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
 
           {/* Error */}
           {error && (
-            <div className="glass-card p-4 border border-red-500/30 bg-red-500/5">
+            <div className="rounded-xl p-4 border border-red-500/30 bg-red-500/5">
               <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}

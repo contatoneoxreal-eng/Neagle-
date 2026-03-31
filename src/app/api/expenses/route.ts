@@ -16,9 +16,8 @@ const emptyResponse = {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const period = searchParams.get("period") || "month";
-    const category = searchParams.get("category");
+    const period = request.nextUrl.searchParams.get("period") || "month";
+    const category = request.nextUrl.searchParams.get("category");
 
     const now = new Date();
     let startDate: Date;
@@ -104,7 +103,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Expenses API error:", error);
-    // Return empty data instead of error so dashboard always renders
     return NextResponse.json(emptyResponse);
   }
 }

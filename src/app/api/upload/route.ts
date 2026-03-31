@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { scanReceipt } from "@/lib/claude";
 import { Category } from "@prisma/client";
 
-const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -14,28 +12,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Nenhum arquivo enviado" }, { status: 400 });
     }
 
+    if (file.size > 20 * 1024 * 1024) {
+      return NextResponse.json({ error: "Arquivo muito grande (max 20MB)" }, { status: 400 });
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    const imageBase64 = buffer.toString("base64");
 
-    let imageBase64: string;
+    // Default to jpeg — Claude handles most formats
     let mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg";
+    if (file.type === "image/png") mediaType = "image/png";
+    else if (file.type === "image/webp") mediaType = "image/webp";
+    else if (file.type === "image/gif") mediaType = "image/gif";
 
-    if (SUPPORTED_TYPES.includes(file.type)) {
-      imageBase64 = buffer.toString("base64");
-      mediaType = file.type as typeof mediaType;
-    } else {
-      // HEIC, HEIF, or unknown formats → try converting with sharp
-      try {
-        const sharp = (await import("sharp")).default;
-        const jpegBuffer = await sharp(buffer).jpeg({ quality: 85 }).toBuffer();
-        imageBase64 = jpegBuffer.toString("base64");
-        mediaType = "image/jpeg";
-      } catch {
-        // If sharp fails, send raw as jpeg anyway and let Claude try
-        imageBase64 = buffer.toString("base64");
-        mediaType = "image/jpeg";
-      }
-    }
     const receiptData = await scanReceipt(imageBase64, mediaType);
 
     const category = Object.values(Category).includes(receiptData.category as Category)
@@ -44,16 +34,16 @@ export async function POST(request: NextRequest) {
 
     const expense = await prisma.expense.create({
       data: {
-        storeName: receiptData.storeName,
-        total: receiptData.total,
-        date: new Date(receiptData.date),
+        storeName: receiptData.storeName || "Loja não identificada",
+        total: receiptData.total || 0,
+        date: new Date(receiptData.date || new Date().toISOString()),
         category,
         items: {
-          create: receiptData.items.map((item) => ({
-            name: item.name,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
+          create: (receiptData.items || []).map((item) => ({
+            name: item.name || "Item",
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            totalPrice: item.totalPrice || 0,
           })),
         },
       },
