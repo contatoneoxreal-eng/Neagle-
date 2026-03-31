@@ -1,21 +1,14 @@
 /** @type {import('next').NextConfig} */
 
 // Map Vercel Neon Postgres env vars to what Prisma expects
+// Vercel Neon creates: POSTGRES_URL, POSTGRES_PRISMA_URL, POSTGRES_URL_NON_POOLING
+// Prisma schema expects: DATABASE_URL
+const dbCandidates = ["POSTGRES_PRISMA_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL"];
 if (!process.env.DATABASE_URL) {
-  const candidates = ["POSTGRES_PRISMA_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL"];
-  for (const key of candidates) {
+  for (const key of dbCandidates) {
     if (process.env[key]) {
       process.env.DATABASE_URL = process.env[key];
-      break;
-    }
-  }
-}
-
-if (!process.env.DIRECT_URL) {
-  const candidates = ["POSTGRES_URL_NON_POOLING", "POSTGRES_URL", "DATABASE_URL"];
-  for (const key of candidates) {
-    if (process.env[key]) {
-      process.env.DIRECT_URL = process.env[key];
+      console.log(`[next.config] Mapped ${key} → DATABASE_URL`);
       break;
     }
   }

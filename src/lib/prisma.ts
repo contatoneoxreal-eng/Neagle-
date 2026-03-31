@@ -11,16 +11,6 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
-if (!process.env.DIRECT_URL) {
-  const directCandidates = ["POSTGRES_URL_NON_POOLING", "POSTGRES_PRISMA_URL", "DATABASE_URL"];
-  for (const key of directCandidates) {
-    if (process.env[key]) {
-      process.env.DIRECT_URL = process.env[key];
-      break;
-    }
-  }
-}
-
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
