@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scanReceipt } from "@/lib/claude";
 import { Category } from "@prisma/client";
+import sharp from "sharp";
+
+const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+async function convertToJpeg(buffer: Buffer): Promise<{ base64: string; mediaType: "image/jpeg" }> {
+  const jpegBuffer = await sharp(buffer)
+    .jpeg({ quality: 85 })
+    .toBuffer();
+  return {
+    base64: jpegBuffer.toString("base64"),
+    mediaType: "image/jpeg",
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,9 +27,19 @@ export async function POST(request: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const imageBase64 = buffer.toString("base64");
 
-    const mediaType = file.type as "image/jpeg" | "image/png" | "image/webp";
+    let imageBase64: string;
+    let mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+
+    if (SUPPORTED_TYPES.includes(file.type)) {
+      imageBase64 = buffer.toString("base64");
+      mediaType = file.type as typeof mediaType;
+    } else {
+      // HEIC, HEIF, or unknown formats → convert to JPEG
+      const converted = await convertToJpeg(buffer);
+      imageBase64 = converted.base64;
+      mediaType = converted.mediaType;
+    }
 
     const receiptData = await scanReceipt(imageBase64, mediaType);
 
@@ -45,9 +68,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, expense });
   } catch (error) {
     console.error("Upload error:", error);
-    return NextResponse.json(
-      { error: "Falha ao processar nota fiscal" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Falha ao processar nota fiscal";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

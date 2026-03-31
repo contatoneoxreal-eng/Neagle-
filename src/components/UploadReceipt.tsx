@@ -21,8 +21,8 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
-    if (!file.type.startsWith("image/")) {
-      setError("Envie apenas imagens (JPG, PNG, WebP)");
+    if (!file.type.startsWith("image/") && !file.name.match(/\.(heic|heif)$/i)) {
+      setError("Envie apenas imagens (JPG, PNG, WebP, HEIC)");
       return;
     }
 
@@ -86,7 +86,7 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

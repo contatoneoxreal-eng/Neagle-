@@ -7,7 +7,7 @@ const anthropic = new Anthropic({
 
 export async function scanReceipt(
   imageBase64: string,
-  mediaType: "image/jpeg" | "image/png" | "image/webp" = "image/jpeg"
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg"
 ): Promise<ReceiptData> {
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -61,8 +61,15 @@ Regras:
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";
 
+  // Remove markdown code blocks if present
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  const data: ReceiptData = JSON.parse(cleaned);
 
+  // Extract JSON from response even if there's extra text
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("Não foi possível extrair dados da nota fiscal");
+  }
+
+  const data: ReceiptData = JSON.parse(jsonMatch[0]);
   return data;
 }
