@@ -39,7 +39,8 @@ export default function Dashboard() {
     try {
       const res = await fetch(`/api/expenses?period=${period}`);
       if (!res.ok) throw new Error("API error");
-      const data = await res.json();
+      const text = await res.text();
+      const data = JSON.parse(text);
       setStats(data.stats ?? emptyStats);
       setExpenses(data.expenses ?? []);
     } catch (err) {

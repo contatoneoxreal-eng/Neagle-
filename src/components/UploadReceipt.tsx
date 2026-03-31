@@ -36,13 +36,19 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
       formData.append("file", file);
 
       const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const text = await res.text();
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Erro no servidor. Verifique se o banco de dados está configurado.");
+      }
 
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || "Erro ao processar");
       }
 
-      const data = await res.json();
       setResult({
         storeName: data.expense.storeName,
         total: data.expense.total,
