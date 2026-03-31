@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const emptyResponse = {
+  expenses: [],
+  stats: {
+    totalMonth: 0,
+    totalWeek: 0,
+    dailyAverage: 0,
+    biggestExpense: 0,
+    totalReceipts: 0,
+    categoryBreakdown: [],
+    dailyExpenses: [],
+  },
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -91,9 +104,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Expenses API error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch expenses" },
-      { status: 500 }
-    );
+    // Return empty data instead of error so dashboard always renders
+    return NextResponse.json(emptyResponse);
   }
 }

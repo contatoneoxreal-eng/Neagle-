@@ -1,14 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ReceiptData } from "@/types";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
 export async function scanReceipt(
   imageBase64: string,
   mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg"
 ): Promise<ReceiptData> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY não configurada");
+  }
+
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 1024,
@@ -61,10 +65,8 @@ Regras:
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";
 
-  // Remove markdown code blocks if present
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-  // Extract JSON from response even if there's extra text
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("Não foi possível extrair dados da nota fiscal");

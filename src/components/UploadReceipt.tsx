@@ -21,12 +21,20 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
-    if (!file.type.startsWith("image/") && !file.name.match(/\.(heic|heif)$/i)) {
+    // Accept any file that looks like an image
+    const isImage = file.type.startsWith("image/") ||
+      /\.(jpg|jpeg|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name);
+
+    if (!isImage) {
       setError("Envie apenas imagens (JPG, PNG, WebP, HEIC)");
       return;
     }
 
-    setPreview(URL.createObjectURL(file));
+    try {
+      setPreview(URL.createObjectURL(file));
+    } catch {
+      setPreview(null);
+    }
     setResult(null);
     setError(null);
     setUploading(true);
@@ -35,25 +43,34 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      // Use text() first to avoid Safari JSON parse errors
       const text = await res.text();
 
       let data;
       try {
         data = JSON.parse(text);
       } catch {
-        throw new Error("Erro no servidor. Verifique se o banco de dados está configurado.");
+        throw new Error("Erro no servidor. Verifique se o banco de dados e a API key estão configurados.");
       }
 
       if (!res.ok) {
         throw new Error(data.error || "Erro ao processar");
       }
 
+      if (!data.expense) {
+        throw new Error("Resposta inválida do servidor");
+      }
+
       setResult({
-        storeName: data.expense.storeName,
-        total: data.expense.total,
-        category: data.expense.category,
-        items: data.expense.items,
+        storeName: data.expense.storeName || "Loja não identificada",
+        total: data.expense.total || 0,
+        category: data.expense.category || "OUTROS",
+        items: Array.isArray(data.expense.items) ? data.expense.items : [],
       });
       onSuccess();
     } catch (err) {
@@ -77,7 +94,7 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
         Adicionar Nota Fiscal
       </h2>
 
-      {/* Inputs escondidos */}
+      {/* Hidden file inputs */}
       <input
         ref={cameraRef}
         type="file"
@@ -104,11 +121,11 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
         <div className="space-y-4">
           {/* Drag and drop area */}
           <div
-            className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+            className={"relative border-2 border-dashed rounded-xl p-6 text-center transition-all " + (
               dragging
                 ? "border-neon-cyan bg-neon-cyan/5"
                 : "border-dark-500"
-            }`}
+            )}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={(e) => {
@@ -135,7 +152,7 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
             </div>
           </div>
 
-          {/* Botões de ação */}
+          {/* Action buttons */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => cameraRef.current?.click()}
@@ -173,16 +190,26 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
               </span>
             </button>
           </div>
+
+          {/* Error in initial state */}
+          {error && (
+            <div className="glass-card p-4 border border-red-500/30 bg-red-500/5">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Preview da imagem */}
-          <div className="relative rounded-xl overflow-hidden bg-dark-700 flex items-center justify-center">
+          {/* Image preview */}
+          <div className="relative rounded-xl overflow-hidden bg-dark-700 flex items-center justify-center min-h-[200px]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={preview}
               alt="Preview da nota fiscal"
               className="max-h-64 object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
             {uploading && (
               <div className="absolute inset-0 bg-dark-900/80 flex flex-col items-center justify-center gap-3">
@@ -194,7 +221,7 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
             )}
           </div>
 
-          {/* Resultado */}
+          {/* Result */}
           {result && (
             <div className="glass-card glow-cyan p-4 space-y-3">
               <div className="flex items-center gap-2">
@@ -241,14 +268,14 @@ export default function UploadReceipt({ onSuccess }: { onSuccess: () => void }) 
             </div>
           )}
 
-          {/* Erro */}
+          {/* Error */}
           {error && (
             <div className="glass-card p-4 border border-red-500/30 bg-red-500/5">
               <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}
 
-          {/* Botão nova nota */}
+          {/* Reset button */}
           {!uploading && (
             <button
               onClick={reset}

@@ -2,19 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scanReceipt } from "@/lib/claude";
 import { Category } from "@prisma/client";
-import sharp from "sharp";
 
 const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-
-async function convertToJpeg(buffer: Buffer): Promise<{ base64: string; mediaType: "image/jpeg" }> {
-  const jpegBuffer = await sharp(buffer)
-    .jpeg({ quality: 85 })
-    .toBuffer();
-  return {
-    base64: jpegBuffer.toString("base64"),
-    mediaType: "image/jpeg",
-  };
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,18 +18,24 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     let imageBase64: string;
-    let mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+    let mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg";
 
     if (SUPPORTED_TYPES.includes(file.type)) {
       imageBase64 = buffer.toString("base64");
       mediaType = file.type as typeof mediaType;
     } else {
-      // HEIC, HEIF, or unknown formats → convert to JPEG
-      const converted = await convertToJpeg(buffer);
-      imageBase64 = converted.base64;
-      mediaType = converted.mediaType;
+      // HEIC, HEIF, or unknown formats → try converting with sharp
+      try {
+        const sharp = (await import("sharp")).default;
+        const jpegBuffer = await sharp(buffer).jpeg({ quality: 85 }).toBuffer();
+        imageBase64 = jpegBuffer.toString("base64");
+        mediaType = "image/jpeg";
+      } catch {
+        // If sharp fails, send raw as jpeg anyway and let Claude try
+        imageBase64 = buffer.toString("base64");
+        mediaType = "image/jpeg";
+      }
     }
-
     const receiptData = await scanReceipt(imageBase64, mediaType);
 
     const category = Object.values(Category).includes(receiptData.category as Category)

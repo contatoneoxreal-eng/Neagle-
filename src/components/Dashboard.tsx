@@ -37,14 +37,22 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/expenses?period=${period}`);
-      if (!res.ok) throw new Error("API error");
+      const res = await fetch("/api/expenses?period=" + period);
       const text = await res.text();
-      const data = JSON.parse(text);
-      setStats(data.stats ?? emptyStats);
-      setExpenses(data.expenses ?? []);
-    } catch (err) {
-      console.error("Failed to fetch dashboard data:", err);
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+      if (data && data.stats) {
+        setStats(data.stats);
+        setExpenses(data.expenses || []);
+      } else {
+        setStats(emptyStats);
+        setExpenses([]);
+      }
+    } catch {
       setStats(emptyStats);
       setExpenses([]);
     } finally {
@@ -77,11 +85,11 @@ export default function Dashboard() {
             <div className="flex items-center bg-dark-700 rounded-lg p-1 mr-2">
               <button
                 onClick={() => setTab("dashboard")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                className={"flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all " + (
                   tab === "dashboard"
                     ? "bg-dark-500 text-neon-cyan shadow-sm"
                     : "text-gray-400 hover:text-gray-200"
-                }`}
+                )}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
@@ -90,11 +98,11 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => setTab("upload")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                className={"flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all " + (
                   tab === "upload"
                     ? "bg-dark-500 text-neon-magenta shadow-sm"
                     : "text-gray-400 hover:text-gray-200"
-                }`}
+                )}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -122,11 +130,11 @@ export default function Dashboard() {
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={"px-4 py-2 rounded-lg text-sm font-medium transition-all " + (
                   period === p
                     ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
                     : "text-gray-400 hover:text-gray-200 hover:bg-dark-600"
-                }`}
+                )}
               >
                 {periodLabels[p]}
               </button>
