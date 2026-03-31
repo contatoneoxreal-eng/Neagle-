@@ -11,15 +11,69 @@ interface UploadResult {
   items: { name: string; quantity: number; totalPrice: number }[];
 }
 
+function compressImage(file: File, maxWidth = 1600, quality = 0.8): Promise<File> {
+  return new Promise((resolve) => {
+    // If already small enough, skip compression
+    if (file.size < 1024 * 1024) {
+      resolve(file);
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 async function safeUpload(file: File): Promise<{ success: boolean; expense?: UploadResult; error?: string }> {
+  // Compress image to avoid Vercel body size limits
+  let processedFile: File;
+  try {
+    processedFile = await compressImage(file);
+  } catch {
+    processedFile = file;
+  }
+
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", processedFile);
 
   let res: Response;
   try {
-    res = await fetch("/api/upload", { method: "POST", body: formData });
-  } catch {
-    return { success: false, error: "Erro de conexão. Tente novamente." };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout
+    res = await fetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
+    clearTimeout(timeout);
+  } catch (err) {
+    const msg = err instanceof Error && err.name === "AbortError"
+      ? "Tempo esgotado. A imagem pode ser muito grande, tente uma foto menor."
+      : "Erro de conexão. Tente novamente.";
+    return { success: false, error: msg };
   }
 
   let text: string;

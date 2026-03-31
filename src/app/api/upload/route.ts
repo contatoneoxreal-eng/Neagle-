@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { scanReceipt } from "@/lib/claude";
 import { Category } from "@prisma/client";
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

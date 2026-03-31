@@ -5,6 +5,8 @@ import { downloadImage, sendWhatsAppMessage } from "@/lib/twilio";
 import { categoryLabels, formatCurrency } from "@/lib/utils";
 import { Category } from "@prisma/client";
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
