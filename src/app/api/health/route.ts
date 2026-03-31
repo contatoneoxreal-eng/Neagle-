@@ -6,6 +6,9 @@ export async function GET() {
   const checks = {
     database_url: !!process.env.DATABASE_URL,
     anthropic_key: !!process.env.ANTHROPIC_API_KEY,
+    postgres_url: !!process.env.POSTGRES_URL,
+    postgres_prisma_url: !!process.env.POSTGRES_PRISMA_URL,
+    postgres_url_non_pooling: !!process.env.POSTGRES_URL_NON_POOLING,
     database_url_preview: process.env.DATABASE_URL
       ? process.env.DATABASE_URL.replace(/\/\/.*@/, "//***@").substring(0, 50) + "..."
       : "NOT SET",
