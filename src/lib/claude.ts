@@ -6,31 +6,33 @@ export async function scanReceipt(
   mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg"
 ): Promise<ReceiptData> {
   if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY não configurada");
+    throw new Error("ANTHROPIC_API_KEY não configurada. Adicione nas variáveis de ambiente do Vercel.");
   }
 
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: imageBase64,
+  let response;
+  try {
+    response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType,
+                data: imageBase64,
+              },
             },
-          },
-          {
-            type: "text",
-            text: `Analise esta nota fiscal/recibo e extraia as informações em JSON.
+            {
+              type: "text",
+              text: `Analise esta nota fiscal/recibo e extraia as informações em JSON.
 
 Responda APENAS com o JSON, sem markdown ou texto adicional.
 
@@ -56,11 +58,21 @@ Regras:
 - Se não conseguir ler a data, use a data de hoje
 - Valores monetários em número (sem R$)
 - Se não houver itens detalhados, crie um único item com o total`,
-          },
-        ],
-      },
-    ],
-  });
+            },
+          ],
+        },
+      ],
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("authentication") || message.includes("401") || message.includes("x-api-key")) {
+      throw new Error("API key inválida. Verifique a ANTHROPIC_API_KEY nas variáveis de ambiente do Vercel.");
+    }
+    if (message.includes("429") || message.includes("rate")) {
+      throw new Error("Limite de requisições atingido. Tente novamente em alguns segundos.");
+    }
+    throw new Error(`Erro ao analisar nota fiscal: ${message}`);
+  }
 
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";
